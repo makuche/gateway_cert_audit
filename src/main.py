@@ -41,7 +41,7 @@ def parse_arguments():
     parser.add_argument(
         "--repository_path",
         type=str,
-        default="C:\\Dev\\axway"
+        default="C:\\Dev\\axway",
         help="Path to the axway git repository on your machine."
         )
     return parser.parse_args()
@@ -143,7 +143,7 @@ if __name__ == '__main__':
     args = parse_arguments()
     repository_path = Path(args.repository_path).resolve()
     certificates = {}
-    env_file_paths = get_env_file_paths(PATH)
+    env_file_paths = get_env_file_paths(repository_path)
  
     for env_file_path in env_file_paths:
         cert_store_string = read_cert_store_file_content(env_file_path)
