@@ -82,19 +82,21 @@ def parse_all_certificates_from_xml_file_string(
    
     for model in models:
         if model.attributes['type'].value == 'Certificate':
-            cert_from_xml = get_certificate_info_from_xml_node(model, certificates)
+            cert_from_xml = get_certificate_info_from_xml_node(
+                model, certificates)
             if cert_from_xml is None:
+                print(f"WARNING: Skipping certificate from {policy_name} \
+                      due to PEM decoding error.")
                 continue
             else:
                 attributes, cert_alias = cert_from_xml
-            if attributes["serial_nr"] not in certificates:
-                certificates[attributes["serial_nr"]] = {}
-                certificates[
-                    attributes["serial_nr"]]["attributes"] = attributes
-                certificates[attributes["serial_nr"]]["policies"] = []
+            if attributes["fingerprint_SHA512"] not in certificates:
+                cert = certificates[attributes["fingerprint_SHA512"]] = {}
+                cert["attributes"] = attributes
+                cert["policies"] = [(environment, policy_name, cert_alias)]
             else:
-                certificates[attributes["serial_nr"]]["policies"].append(
-                    (policy_name, environment, cert_alias))
+                certificates[attributes["fingerprint_SHA512"]]["policies"] \
+                    .append((environment, policy_name, cert_alias))
        
 def get_certificate_info_from_xml_node(model, certificates):
     cert_attributes = None
@@ -108,15 +110,13 @@ def get_certificate_info_from_xml_node(model, certificates):
             cert_attributes = parse_certificate_content(pem_value)
             if cert_attributes is None:
                 return
-            # else:
-            #     if x509_cert["serial_nr"] not in certificates:
-            #         certificates[x509_cert["serial_nr"]] = {}
-            #         certificates[x509_cert["serial_nr"]]["cert_info"] = x509_cert
-            #         certificates[x509_cert["serial_nr"]]["policies"] = {}
         elif current_name == 'dname':
             if cert_attributes is not None:
                 cert_alias = child_node.childNodes[0].firstChild.nodeValue
- 
+        elif current_name == 'storeType':
+            if cert_attributes is not None:
+                cert_attributes["store_type"] = child_node.childNodes[0] \
+                    .firstChild.nodeValue
     return cert_attributes, cert_alias
  
 def parse_certificate_content(pem_value):
@@ -150,9 +150,6 @@ if __name__ == '__main__':
         env_path = env_file_path.__str__()
         policy_name = env_path.split('\\')[-2]
         environment = env_path.split('_')[-1].split('.')[0]
-        print(env_file_path.__str__())
-        print(env_file_path)
-        print("policy:", policy_name)
         parse_all_certificates_from_xml_file_string(
             cert_store_string, certificates, policy_name, environment)
         #PARSING_ERRORS += errs
