@@ -5,7 +5,6 @@ import argparse
 import multiprocessing
 
 from multiprocessing import Pool
-from collections import defaultdict
 from xml.dom import minidom
 from OpenSSL.crypto import load_certificate
 from OpenSSL.crypto import FILETYPE_PEM
@@ -13,9 +12,6 @@ from pathlib import Path
  
 from cert import X509Certificate
  
-PATH = Path().cwd().parent.parent.parent / "git/axway"
-CERTIFICATES = defaultdict(list)
-PARSING_ERRORS = 0
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -35,7 +31,8 @@ def get_env_file_paths(repository_path):
     if not isinstance(repository_path, Path):
         raise TypeError("repository base path should be of type Path.")
     env_file_paths = [f for f in repository_path.rglob("*.env")]
-    print(f"Found {len(env_file_paths)} environment files! Parsing certificates now...")
+    print(f"Found {len(env_file_paths)} environment files!" +
+           "Parsing certificates now...")
     return env_file_paths
  
 def read_cert_store_file_content(env_file_path):
@@ -45,7 +42,8 @@ def read_cert_store_file_content(env_file_path):
     with zipfile.ZipFile(env_file_path, "r") as f:
         zip_contents = f.namelist()
         pattern = ".*CertStore-.*?\.xml"
-        cert_store_relative_path = get_cert_store_relative_path(zip_contents, pattern)
+        cert_store_relative_path = get_cert_store_relative_path(
+            zip_contents, pattern)
         with f.open(cert_store_relative_path, "r") as cert_store:
             return cert_store.read().decode("utf-8", errors="ignore")
  
@@ -67,8 +65,8 @@ def parse_all_certificates_from_xml_file_string(
             cert_from_xml = get_certificate_info_from_xml_node(
                 model, certificates)
             if cert_from_xml is None:
-                print(f"WARNING: Skipping certificate from {policy_name} \
-                      due to PEM decoding error.")
+                print(f"WARNING: Skipping certificate from {policy_name} " +
+                      "due to PEM decoding error.")
                 continue
             else:
                 attributes, cert_alias = cert_from_xml
@@ -104,7 +102,8 @@ def get_certificate_info_from_xml_node(model, certificates):
 def parse_certificate_content(pem_value):
     pem_string = wrap_cert_to_pem_format(pem_value)
     try:
-        certificate = load_certificate(FILETYPE_PEM, pem_string).to_cryptography()
+        certificate = load_certificate(
+            FILETYPE_PEM, pem_string).to_cryptography()
     except ValueError:
         return None
     x509_cert = X509Certificate(certificate)
@@ -119,7 +118,7 @@ def wrap_cert_to_pem_format(cert_content):
  
 def save_as_json(certificates, file_name="sample.json"):
     with open("sample.json", "w") as f:
-        json.dump(certificates, f, indent=4)
+        json.dump(certificates, f, indent=4, sort_keys=True)
  
 def process_env_file(env_file_path):
     try:
