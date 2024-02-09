@@ -1,33 +1,15 @@
-"""
-TODO: Some policy names are not returned yet! see sample.json, some policies
-lists are empty!
-Some certificates return an ANSI error, probably because there is some weird non-
-utf character in one of the certificate attributes. check which ones fail here
-and implement proper exception handling
-
-
-Backlog:
-- possibility to print out all certificates which expire in next 3 months
-  (maybe excluding already expired certificates, since they might not
-   be in use anymore). Color-code
-"""
- 
-# C:\Dev\gateway-provider\version\policies\zone\policy-zone\policy-zone_ENV.env\some-hash-value\
- 
-from collections import defaultdict
-from xml.dom import minidom
-from OpenSSL.crypto import load_certificate
-from OpenSSL.crypto import FILETYPE_PEM
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.serialization import Encoding
-from datetime import datetime, date, timedelta
-from dateutil import relativedelta
-from pathlib import Path
-import os
 import zipfile
 import json
 import re
 import argparse
+import multiprocessing
+
+from multiprocessing import Pool
+from collections import defaultdict
+from xml.dom import minidom
+from OpenSSL.crypto import load_certificate
+from OpenSSL.crypto import FILETYPE_PEM
+from pathlib import Path
  
 from cert import X509Certificate
  
@@ -131,13 +113,29 @@ def parse_certificate_content(pem_value):
 def wrap_cert_to_pem_format(cert_content):
     cert_content = cert_content.replace('\n','')
     cert_content = cert_content.replace('\r','')
-    pem_cert = '-----BEGIN CERTIFICATE-----\n' + cert_content + '\n' + '-----END CERTIFICATE-----'
+    pem_cert = '-----BEGIN CERTIFICATE-----\n' + \
+        cert_content + '\n' + '-----END CERTIFICATE-----'
     return pem_cert
  
 def save_as_json(certificates, file_name="sample.json"):
     with open("sample.json", "w") as f:
         json.dump(certificates, f, indent=4)
  
+def process_env_file(env_file_path):
+    try:
+        cert_store_string = read_cert_store_file_content(env_file_path)
+        env_path = str(env_file_path)
+        policy_name = env_path.split('\\')[-2]
+        environment = env_path.split('_')[-1].split('.')[0]
+        certificates = {}
+        parse_all_certificates_from_xml_file_string(
+            cert_store_string, certificates, policy_name, environment
+        )
+        return certificates
+    except Exception as e:
+        print(f"Error processing env file {env_file_path}")
+        return 0
+
 if __name__ == '__main__':
 
     args = parse_arguments()
@@ -145,14 +143,17 @@ if __name__ == '__main__':
     certificates = {}
     env_file_paths = get_env_file_paths(repository_path)
  
-    for env_file_path in env_file_paths:
-        cert_store_string = read_cert_store_file_content(env_file_path)
-        env_path = env_file_path.__str__()
-        policy_name = env_path.split('\\')[-2]
-        environment = env_path.split('_')[-1].split('.')[0]
-        parse_all_certificates_from_xml_file_string(
-            cert_store_string, certificates, policy_name, environment)
-        #PARSING_ERRORS += errs
-        save_as_json(certificates)
-        #print("not parsed certs:", PARSING_ERRORS)
+    num_processes = multiprocessing.cpu_count()
+    with Pool(num_processes) as pool:
+        results = pool.map(process_env_file, env_file_paths)
 
+    all_certificates = {}
+    for cert_data in results:
+        for fingerprint, cert_info in cert_data.items():
+            if fingerprint not in all_certificates:
+                all_certificates[fingerprint] = cert_info
+            else:
+                all_certificates[fingerprint]['policies'].extend(
+                    cert_info['policies']
+                )
+    save_as_json(all_certificates)
